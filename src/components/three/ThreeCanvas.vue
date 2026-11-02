@@ -21,6 +21,7 @@ const emit = defineEmits(['ready', 'event']);
 const el = ref(null);
 const ready = ref(false);
 const failed = ref(false);
+const errorText = ref('');
 const controller = shallowRef(null);
 let stage = null;
 let near = false;
@@ -35,7 +36,13 @@ async function mount() {
   try {
     const [mod] = await Promise.all([props.load(), whenFontsReady()]);
     if (!near || !el.value) return;
-    stage = new Stage(el.value, props.stage);
+    try {
+      stage = new Stage(el.value, props.stage);
+    } catch (err) {
+      // Some GPUs/drivers refuse multisampled HDR targets: retry with a lighter setup.
+      console.warn('[KEYSPACE] retrying 3D scene with safe settings', err);
+      stage = new Stage(el.value, { ...props.stage, msaa: 0, dprMax: 1.5 });
+    }
     const create = mod.default || mod.create;
     const ctrl = await create(stage, { reduced: prefersReducedMotion(), ...props.params }, (name, payload) =>
       emit('event', name, payload),
@@ -51,6 +58,7 @@ async function mount() {
     emit('ready', ctrl);
   } catch (err) {
     console.error('[KEYSPACE] 3D scene failed to start', err);
+    errorText.value = String(err?.message || err).slice(0, 140);
     failed.value = true;
     unmount();
   } finally {
@@ -115,7 +123,7 @@ defineExpose({
   <div ref="el" class="three-canvas" role="img" :aria-label="label">
     <div v-if="!ready" class="three-canvas__boot" aria-hidden="true">
       <span v-if="!failed">initialising renderer<span class="blink">_</span></span>
-      <span v-else>3D unavailable on this device</span>
+      <span v-else class="err">3D unavailable on this device<small v-if="errorText">{{ errorText }}</small></span>
     </div>
   </div>
 </template>
@@ -136,6 +144,17 @@ defineExpose({
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--muted);
+}
+.err {
+  display: grid;
+  gap: 8px;
+  text-align: center;
+}
+.err small {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--faint);
 }
 .blink {
   animation: blink 1s steps(1) infinite;

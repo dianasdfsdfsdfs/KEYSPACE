@@ -251,7 +251,6 @@ export class Stage {
     this.bloom?.dispose?.();
     this.composer.dispose?.();
     this.renderer.dispose();
-    this.renderer.forceContextLoss?.();
     c.remove();
   }
 }
